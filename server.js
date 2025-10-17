@@ -1,18 +1,9 @@
 import express from "express";
 import cron from "node-cron";
+import { runDistributionCycle } from "./orchestrator.js";
 import { getTopHoldersMoralis } from "./holders.js";
-import {
-  getBNBBalance,
-  getPAXGBalance,
-  swapBNBtoPAXG,
-  waitForOrderCompletion,
-} from "./debridge.js";
-import {
-  distributePAXG,
-  saveDistributionHistory,
-  getDistributionSummary,
-} from "./distributor.js";
 import dotenv from "dotenv";
+import { promises as fs } from "fs";
 
 dotenv.config();
 
@@ -22,76 +13,66 @@ const port = process.env.PORT || 3000;
 app.use(express.json());
 
 let isRunning = false;
-let lastRunTime = null;
-let lastRunStatus = null;
+let lastRunResult = null;
 
-async function runDistributionCycle() {
+function toJSONSafe(value) {
+  return JSON.parse(
+    JSON.stringify(value, (_key, val) =>
+      typeof val === "bigint" ? val.toString() : val,
+    ),
+  );
+}
+
+async function executeCycle() {
   if (isRunning) {
+    console.log("[SERVER] Cycle already running, skipping");
     return;
   }
 
+  console.log("[SERVER] Starting distribution cycle");
   isRunning = true;
-  lastRunTime = new Date();
 
   try {
-    const bnbBalance = await getBNBBalance();
-
-    if (parseFloat(bnbBalance.balance) === 0) {
-      lastRunStatus = "No BNB to convert";
-      return;
-    }
-
-    const swapResult = await swapBNBtoPAXG(bnbBalance.balance);
-    const orderStatus = await waitForOrderCompletion(swapResult.orderId);
-
-    if (!orderStatus.completed) {
-      lastRunStatus = `Order failed: ${orderStatus.error}`;
-      return;
-    }
-
-    const paxgBalance = await getPAXGBalance();
-
-    if (parseFloat(paxgBalance.balance) === 0) {
-      lastRunStatus = "No PAXG received";
-      return;
-    }
-
-    const holders = await getTopHoldersMoralis();
-    const distributionResults = await distributePAXG(
-      holders,
-      parseFloat(paxgBalance.balance),
+    const result = await runDistributionCycle();
+    const safeResult = toJSONSafe(result);
+    lastRunResult = safeResult;
+    console.log(
+      "[SERVER] Cycle completed:",
+      JSON.stringify(safeResult, null, 2),
     );
 
-    await saveDistributionHistory(
-      distributionResults,
-      parseFloat(paxgBalance.balance),
-    );
-    const summary = await getDistributionSummary(distributionResults);
-
-    lastRunStatus = `Success: ${summary.successful}/${summary.totalRecipients} distributions`;
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const filename = `bridge-dist-${timestamp}.json`;
+    await fs.writeFile(filename, JSON.stringify(safeResult, null, 2));
+    console.log(`[SERVER] Saved results to ${filename}`);
   } catch (error) {
-    lastRunStatus = `Error: ${error.message}`;
+    console.log(`[SERVER] Cycle failed with error: ${error.message}`);
+    console.log(`[SERVER] Error stack:`, error.stack);
+    lastRunResult = {
+      status: "error",
+      timestamp: new Date().toISOString(),
+      error: error.message,
+    };
   } finally {
     isRunning = false;
+    console.log("[SERVER] Cycle finished, isRunning set to false");
   }
 }
 
-cron.schedule("0 * * * *", () => {
-  runDistributionCycle();
+cron.schedule("*/10 * * * *", () => {
+  console.log("[SERVER] Cron triggered at", new Date().toISOString());
+  executeCycle();
 });
 
 app.get("/health", (req, res) => {
-  res.json({
-    status: "healthy",
-    isRunning: isRunning,
-    lastRunTime: lastRunTime,
-    lastRunStatus: lastRunStatus,
-    uptime: process.uptime(),
-  });
+  console.log("[SERVER] Health check");
+  res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
-app.post("/distribute", async (req, res) => {
+app.post("/run", async (req, res) => {
+  console.log("[SERVER] Manual run triggered");
   if (isRunning) {
+    console.log("[SERVER] Rejected: already running");
     return res.status(409).json({
       error: "Distribution cycle already running",
       isRunning: true,
@@ -99,20 +80,34 @@ app.post("/distribute", async (req, res) => {
   }
 
   res.json({ message: "Distribution cycle started" });
-  runDistributionCycle();
+  executeCycle();
 });
 
 app.get("/status", (req, res) => {
+  console.log("[SERVER] Status check");
   res.json({
     isRunning: isRunning,
-    lastRunTime: lastRunTime,
-    lastRunStatus: lastRunStatus,
-    nextRun: "Every 60 minutes at the top of the hour",
+    lastRun: lastRunResult,
+    nextRun: "Every 10 minutes",
   });
 });
 
-app.listen(port);
+app.get("/holders", async (req, res) => {
+  console.log("[SERVER] Holders fetch");
+  try {
+    const holders = await getTopHoldersMoralis();
+    res.json({ count: holders.length, holders });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+console.log(`[SERVER] Starting server on port ${port}`);
+app.listen(port, () => {
+  console.log(`[SERVER] Server listening on port ${port}`);
+});
 
 process.on("SIGINT", () => {
+  console.log("[SERVER] Received SIGINT, shutting down");
   process.exit(0);
 });

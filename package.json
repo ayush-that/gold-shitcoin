@@ -6,17 +6,21 @@
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "holders": "node script.js",
     "bridge:test": "node bridge-test.js",
+    "run:once": "node -e \"import('./orchestrator.js').then(m => m.runDistributionCycle().then(r => console.log(JSON.stringify(r, null, 2))))\"",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest run --coverage",
     "format": "prettier --write \"**/*.{js,json,css,md}\""
   },
   "dependencies": {
     "axios": "^1.6.2",
     "dotenv": "^16.3.1",
-    "prettier": "^3.6.2",
+    "ethers": "^6.13.4",
     "express": "^4.19.2",
     "node-cron": "^3.0.3",
-    "ethers": "^6.13.4"
+    "prettier": "^3.6.2"
   },
   "keywords": [
     "bsc",
@@ -25,5 +29,11 @@
     "bscscan"
   ],
   "author": "",
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "@vitest/coverage-v8": "^3.2.4",
+    "@vitest/ui": "^3.2.4",
+    "supertest": "^7.1.4",
+    "vitest": "^3.2.4"
+  }
 }

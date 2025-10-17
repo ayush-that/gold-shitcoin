@@ -14,7 +14,7 @@ async function main() {
   }
   if (!amountBnb || !ethRecipient) {
     throw new Error(
-      "Usage: node bridge-test.js <amountBNB> <ethRecipient> [slippage]"
+      "Usage: node bridge-test.js <amountBNB> <ethRecipient> [slippage]",
     );
   }
 
@@ -77,7 +77,7 @@ async function main() {
         ? JSON.stringify(server)
         : lastError && lastError.message
           ? lastError.message
-          : "Failed to create order") + "\n"
+          : "Failed to create order") + "\n",
     );
     process.exit(1);
   }
@@ -96,7 +96,7 @@ async function main() {
       hash: sent.hash,
       status: receipt.status,
       orderId: orderData.orderId,
-    }) + "\n"
+    }) + "\n",
   );
 }
 
