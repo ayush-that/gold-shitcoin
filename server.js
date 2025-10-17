@@ -18,8 +18,8 @@ let lastRunResult = null;
 function toJSONSafe(value) {
   return JSON.parse(
     JSON.stringify(value, (_key, val) =>
-      typeof val === "bigint" ? val.toString() : val,
-    ),
+      typeof val === "bigint" ? val.toString() : val
+    )
   );
 }
 
@@ -38,7 +38,7 @@ async function executeCycle() {
     lastRunResult = safeResult;
     console.log(
       "[SERVER] Cycle completed:",
-      JSON.stringify(safeResult, null, 2),
+      JSON.stringify(safeResult, null, 2)
     );
 
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
@@ -67,6 +67,14 @@ cron.schedule("*/10 * * * *", () => {
 app.get("/health", (req, res) => {
   console.log("[SERVER] Health check");
   res.json({ status: "ok", timestamp: new Date().toISOString() });
+});
+
+app.get("/ready", async (req, res) => {
+  try {
+    res.json({ status: "ready", timestamp: new Date().toISOString() });
+  } catch (_e) {
+    res.status(503).json({ status: "not_ready" });
+  }
 });
 
 app.post("/run", async (req, res) => {
