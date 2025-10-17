@@ -1,0 +1,12 @@
+[phases.setup]
+nixPkgs = ["nodejs_20", "corepack"]
+
+[phases.install]
+cmds = [
+  "corepack enable",
+  "corepack prepare pnpm@9.11.0 --activate",
+  "pnpm install --prod"
+]
+
+[start]
+cmd = "node server.js"
